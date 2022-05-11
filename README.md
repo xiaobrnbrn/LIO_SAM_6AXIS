@@ -1,44 +1,87 @@
 # LIO_SAM_6AXIS
-This repo may help to adapt LIO_SAM in your own data! It has some minor changes comparing with the origin system.
+This repo may help to adapt LIO_SAM to your own sensors! It has some changes comparing with the origin system.
 
-- support with  a 6-axis IMU, since the orientation information of IMU is not used in state estimation module.
+- support with a 6-axis IMU, since the orientation information of IMU is not used in state estimation module.
 - support normal GNSS, we do not need to adapt for the robot_localization node.
 - support the gps constraint visualization module to help debugging the normal GNSS.(the following picture)
 
 # Introduction
 
-LIO_SAM is only suitable for 9-axis IMU, for the following reasons.
+LIO_SAM is only used for 9-axis IMU, for the following reasons.
 
 - the initialization module need absolute orientation to initialize the LIO system.
 - the back-end GNSS-based optimization relies on the robot_localization node, and also requires a 9-axis IMU.
 
-Therefore, only minor changes to the original code are required.  which can directly use GPS coordinates of good quality for optimization. Finally, we also made some explanations for some common lidars, as well as coordinate system adaptation and external parameters between lidars and IMUs, such as Hesai.
+Therefore, only minor changes to the original code are required.  which can directly use GPS points of good quality for optimization. Finally, we also made some explanations for some common lidars, as well as coordinate system adaptation and extrinsics between lidars and IMUs, such as Hesai.
 
 ![image-20220421102351677](README/image-20220421102351677.png)
 
 we add the gps constraint visualization module to help debugging the normal gps(red lines represents for gps constraint).
 
-![image-20220421113413972](README/image-20220421113413972.png)
+![GPS constrain visualization](README/image-20220421113413972.png)
 
 # Problems
 
-1. `velodyne` + `stim300`(6 axis)+`gps` codes and data are available, but only for test!  we will updtae the new version of codes later. **I haven't released the node of `GPS_ODOM`, because this part of the code is poorly written**, I will organize and update it later. You can first set `useGPS` to false. 
+1. `velodyne` + `stim300`(6 axis)+`gps` codes and data are available, but only for testing!  we will update the new version of codes later. 
 
-   > The test data is a section of campus of more than 10km. It was collected on a mountain road. The elevation changes greatly, the GPS data is unstable, and there is a tunnel, which is very challenging. LIO_SAM will be difficult to close the loop or may crash directly in the later downhill road. You can test it yourself and find the reason. 
+   > LIO_SAM will be difficult to close the loop without GPS or may crash directly in the later downhill road. You can test it yourself and find the reason. 
 
-2. ouster/pandar lidar + 6-aixs IMU are all ok, we will release the test data. 
+2. **ouster+stim300**/**pandar + 6-aixs IMU** are all available, we will release the test data around June. 
+
+   > Please note that some people have different ways of modifying the timestamps in the driver module when using ouster. Remember to modify the unit of time in the timestamps.
+
+3. I am looking for the stable GPS odom information to initialize the LIO system in the `updateInitialGuess` function of the `mapOptmization` node. Although this method works, it is not the best choice.
+
+# Data
+
+We provided a very challenging long-distance vehicle dataset. You can get the campus data in  [dropbox](https://drive.google.com/file/d/1bGmIll1mJayh5_2LokoshVneUmJ6ep00/view)  or [BaiduNetdisk](https://pan.baidu.com/s/1il01D0Ea3KgfdABS8iPHug) (password: m8g4).
+
+- more than 10km.
+
+- the campus is on a mountain, and the data is collected from the mountainside to the top of the mountain and finally to the foot of the mountain, and there is a large elevation change.
+
+- there is a tunnel scene collected in the mountain campus at the beginning. It's hard for us to initialize the LIO system with GNSS. 
+
+ > In the tunnel, the LIO is degraded, and the drift is large. GPS data within a short distance before and after entering or leaving the tunnel cannot be trusted, because GPS takes a certain amount of time to converge, so **an incorrect covariance threshold may cause the pose graph to introduce more error constraints**, as shown in the following figure(the red lines in the tunnel maybe wrong constrains).
+![image-20220428045314514](README/image-20220428045314514.png)
+
+- The data quality of the initial GPS mainly is poor, and there are large and small closed loops.
+
+> in this case, only use the radius search method, the LIO_SAM can not find the big loop without GPS.
+>
+> ![image-20220428050315811](README/image-20220428050315811.png)
+
+We ensure that the coordinate systems of the lidar and IMU are consistent, and it is easy to set the extrinsic matrix.
+
+![image-20220426181902940](README/image-20220426181902940.png)
+
+Using the campus data, we provide the test videos. 
+
+- when we do not use gps, the LIO_SAM can not loop successfully! see the video here [Youtube](https://youtu.be/IRM9Ws2C7R8)，[Bilibili](https://www.bilibili.com/video/BV1hi4y1m7c7?spm_id_from=333.999.0.0). 
+
+![image-20220428223306035](README/image-20220428223306035.png)
+
+- when we use GPS, LIO_SAM show good performance, especially for the loop clouser. see the videos here [Youtube](https://youtu.be/Jfj69AoPXao)，[Bilibili](https://www.bilibili.com/video/BV1o541117sr/?spm_id_from=333.788).
+
+![image-20220428223411955](README/image-20220428223411955.png)
 
 # Run
 
-when you set `useGPS` as true,  remember to test the params `gpsCovThreshold`. Just make sure your vehicles are in a good position at the first beginning of the sequence where the status of GNSS is stable encough, or you can not initialize your system successfully! 
+when you set `useGPS` as true,  remember to test the params `gpsCovThreshold`. Just **make sure your vehicles are in a good position at the first beginning of the sequence where the status of GNSS is stable encough**, or you can not initialize your system successfully! 
 
 ```
 roslaunch lio_sam_6axis run.launch
 ```
 
-- [ ] you can get the test  [video](https://www.youtube.com/watch?v=3H-qZvEado0)
+when you set the `useGPS` true, you may get the following los. It means that these gps points are used for optimization.
 
-- [ ] You can get the test data in  [dropbox](https://drive.google.com/file/d/1bGmIll1mJayh5_2LokoshVneUmJ6ep00/view)  or [BaiduNetdisk](https://pan.baidu.com/s/1il01D0Ea3KgfdABS8iPHug) (password: m8g4)
+```bash
+[ INFO] [1651092699.914940274]: curr gps cov: 11.022400, 11.022400 , 176.358400
+[ INFO] [1651092700.516013418]: curr gps pose: 13.806815, 7.928380 , 5.147980
+[ INFO] [1651092700.516037958]: curr gps cov: 11.022400, 11.022400 , 176.358400
+[ INFO] [1651092700.516045476]: curr gps pose: 13.868968, 8.179937 , 4.978980
+[ INFO] [1651092700.516052422]: curr gps cov: 11.022400, 11.022400 , 176.358400
+```
 
 ## Adaptation for 6-axis IMU
 
@@ -76,6 +119,7 @@ Because LIO_SAM only uses the acceleration and angular velocity in the IMU data 
     // we only need to align the coordinate system.
     // Eigen::Quaterniond q_final = q_from * extQRPY;
     Eigen::Quaterniond q_final = extQRPY;
+    q_final.normalize();
     imu_out.orientation.x = q_final.x();
     imu_out.orientation.y = q_final.y();
     imu_out.orientation.z = q_final.z();
@@ -92,13 +136,18 @@ Because LIO_SAM only uses the acceleration and angular velocity in the IMU data 
   }
 ```
 
-`q_final` represents the orientation result taken from the IMU data. For the 6-axis IMU, we generally integrate our own in the SLAM system instead of directly adopting this result. But in the 9-axis IMU, the orentation part is the global attitude, that is, the result of the fusion with the magnetometer, which represents the angle between the IMU and the magnetic north pole. So here we only need to align the coordinate axis of the orentation data with the base_link, that is, multiply the lidar to the external parameter of the IMU.
+`q_final` represents the orientation result taken from the IMU data. For the 6-axis IMU, we generally integrate our own in the SLAM system instead of directly adopting this result. But in the 9-axis IMU, the orentation part is the global attitude, that is, the result of the fusion with the magnetometer, which represents the angle between the IMU and the magnetic north pole. So here we only need to align the coordinate axis of the orentation data with the base_link, that is, multiply the lidar to the extrinsic of the IMU.
 
 ## Adaptation for different types of lidar
 
 Make sure the point cloud timestamp, ring channel is ok. In addition, the lidar coordinate system should meet the REP105 standard, that is, xyz represents the front and upper right direction. Note that the structure of the point cloud is related to your lidar driver, and may not be exactly the same. The format below is for reference only.
 
-### Pandar
+### POINT_CLOUD_REGISTER_POINT_STRUCT
+
+You need to add some specific point cloud struct for your own lidar  in the `imageProjection.cpp`. 
+
+
+#### Pandar
 
 The coordinate system of Hesai LiDAR is different from that of the traditional REP105, and its xyz represent the left 、back and top respectively.
 
@@ -121,18 +170,71 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PandarPointXYZIRT,
 )
 ```
 
-### Ouster
+We strongly recommend that **you first adjust the coordinate system of the pandar lidar (because it is the most special) to be consistent with the REP105**, and then adjust the LIDAR2IMU extrinsincs. You just need to modify the `cachePointCloud` function in `imageProjection.cpp`
 
-The point cloud timestamp of ouster lidar is not necessarily ustc time。
+```c++
+    if (sensor == SensorType::VELODYNE || sensor == SensorType::LIVOX) {
+      pcl::moveFromROSMsg(currentCloudMsg, *laserCloudIn);
+    } else if (sensor == SensorType::OUSTER) {
+      // Convert to Velodyne format
+      pcl::moveFromROSMsg(currentCloudMsg, *tmpOusterCloudIn);
+      laserCloudIn->points.resize(tmpOusterCloudIn->size());
+      laserCloudIn->is_dense = tmpOusterCloudIn->is_dense;
+      for (size_t i = 0; i < tmpOusterCloudIn->size(); i++) {
+        auto &src = tmpOusterCloudIn->points[i];
+        auto &dst = laserCloudIn->points[i];
+        dst.x = src.x;
+        dst.y = src.y;
+        dst.z = src.z;
+        dst.intensity = src.intensity;
+        dst.ring = src.ring;
+        //dst.time = src.t * 1e-9f;
+        dst.time = src.time;
+      }
+    } else if (sensor == SensorType::HESAI) {
+      // Convert to Velodyne format
+      pcl::moveFromROSMsg(currentCloudMsg, *tmpPandarCloudIn);
+      laserCloudIn->points.resize(tmpPandarCloudIn->size());
+      laserCloudIn->is_dense = tmpPandarCloudIn->is_dense;
+      double time_begin = tmpPandarCloudIn->points[0].timestamp;
+      for (size_t i = 0; i < tmpPandarCloudIn->size(); i++) {
+        auto &src = tmpPandarCloudIn->points[i];
+        auto &dst = laserCloudIn->points[i];
+        // please note that pandar frame: X Y Z ->  left back top
+        // so when you transform it, the newly X0 maybe -Y, Y0 = X, Z keep the same
+        // you can also multiply a rotation matrix
+        dst.x = src.y * -1;
+        dst.y = src.x;
+        //        dst.x = src.x;
+        //        dst.y = src.y;
+        dst.z = src.z;
+        dst.intensity = src.intensity;
+        dst.ring = src.ring;
+        dst.time = src.timestamp - time_begin; // s
+      }
+    } else {
+      ROS_ERROR_STREAM("Unknown sensor type: " << int(sensor));
+      ros::shutdown();
+    }
+```
+
+Now your lidar base_link  is REP105 standard, you just need to regard it as a Velodyne lidar to adjust the extrinsincs between IMU. Here is my notes.
+
+![8fa85ad74f6255802937f9470775774](README/161970853-f762f7c7-8876-463f-b58e-85622c87f891.jpg)
+
+#### Ouster
+
+The point cloud timestamp of ouster lidar is not necessarily ustc time. **Note the data type and order of the time channel.**
 
 ```c++
 struct OusterPointXYZIRT {
   PCL_ADD_POINT4D;
   float intensity;
-//  uint32_t time;
+    // some people may modity the driver when they use the ouster lidar
+	//  uint32_t time;
   uint16_t reflectivity;
   uint8_t ring;
-  std::uint16_t ambient;  // additional property of p.ouster
+  std::uint16_t ambient; 
   float time;
   uint16_t noise;
   uint32_t range;
@@ -150,9 +252,21 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(OusterPointXYZIRT,
 )
 ```
 
+### Time Units
+
+Then you can set the `debugLidarTimestamp` to debug the timestamp of each points. Please note that the point cloud timestamp unit output by the terminal is **seconds**, and **the value is between 0.0-0.1s**. Since the time for mechanical lidar to scan a circle to obtain a point cloud is usually 0.1s.
+
+```
+if (debugLidarTimestamp) {
+  std::cout << std::fixed << std::setprecision(12) << "end time from pcd and size: "
+            << laserCloudIn->points.back().time
+            << ", " << laserCloudIn->points.size() << std::endl;
+}
+```
+
 # Acknowledgments
 
-Thanks for  [Guoqing Zhang](https://github.com/MyEvolution), Jianhao Jiao](https://github.com/gogojjh).
+Thanks to  [Guoqing Zhang](https://github.com/MyEvolution), [Jianhao Jiao](https://github.com/gogojjh).
 
 Thanks for [LIO_SAM](https://github.com/TixiaoShan/LIO-SAM).
 
